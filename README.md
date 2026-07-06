@@ -71,19 +71,64 @@ Why this plan:
 
 ## 🧪 Testing PawPal+
 
+Run the full suite from the project root:
+
 ```bash
-# Run the full test suite:
-pytest
+python -m pytest          # run all tests
 
-# Run with coverage:
-pytest --cov
+================================================= 15 passed in 0.11s =================================================
+
+
+python -m pytest --cov     # optional: with coverage
 ```
 
-Sample test output:
+### What the tests cover
+
+The suite lives in `tests/test_pawpal.py` (15 tests) and targets the logic that
+actually makes scheduling decisions:
+
+- **Sorting correctness** — `sort_by_time()` returns tasks in chronological
+  order (untimed tasks sink to the end), and `sort_tasks()` orders by priority
+  first, shorter duration as the tie-breaker.
+- **Recurrence logic** — completing a **daily** task auto-creates the next
+  instance due the following day (fresh id, `completed=False`); one-off tasks
+  spawn nothing; `weekdays` recurrence rolls Friday → Monday; asking a
+  non-recurring task for its next occurrence raises.
+- **Conflict detection** — the `Scheduler` flags two tasks at the *same* time,
+  labels same-pet vs. different-pet clashes, and treats back-to-back
+  (touching-but-not-overlapping) tasks as *no* conflict.
+- **Conflict resolution** — when two tasks want the same slot, the second is
+  bumped back-to-back and the move is recorded for the plan's explanation.
+- **Budget fitting** — a zero-minute budget schedules nothing; the greedy fit
+  will schedule a smaller lower-priority task when a higher-priority one is too
+  big to fit.
+- **Edge cases** — a pet with no tasks produces a valid, empty plan without
+  crashing.
+
+### Successful test run
 
 ```
-# Paste your pytest output here
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.1.0, pluggy-1.6.0
+rootdir: C:\Users\kytra\Documents\CodePath\AI110\ai110-module2show-pawpal-starter
+collected 15 items
+
+tests\test_pawpal.py ...............                                     [100%]
+
+============================= 15 passed in 0.03s ==============================
 ```
+
+### Confidence Level
+
+**★★★★☆ (4 / 5)**
+
+All 15 tests pass and cover the core decision-making paths — sorting, recurrence,
+budget-fitting, and both conflict detection and resolution — including their
+boundary cases. I'm holding back the fifth star because two known quirks are
+documented-but-untested: weekly `next_occurrence()` advances by 7 days without
+re-anchoring to `recurrence_weekday`, and a late task can roll past midnight and
+sort to the front of the plan. Neither is exercised yet, so reliability on those
+paths is unverified.
 
 ## 📐 Smarter Scheduling
 
