@@ -47,12 +47,27 @@ pip install -r requirements.txt
 Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+============================================================
+  TODAY'S SCHEDULE  (MONDAY, JULY 06, 2026)
+  Caregiver: Jordan
+============================================================
+  08:00  │  Morning walk      (Biscuit, 30 min)       [HIGH]
+  08:30  │  Feeding           (Biscuit, 10 min)       [HIGH]
+  08:40  │  Feeding           (Mochi, 10 min)         [HIGH]
+  18:00  │  Play time         (Mochi, 20 min)         [LOW]
+  18:20  │  Litter cleanup    (Mochi, 15 min)         [MEDIUM]
+  18:35  │  Training          (Biscuit, 20 min)       [MEDIUM]
+------------------------------------------------------------
+  Total scheduled time: 105 / 120 min
+============================================================
+
+Conflict warnings:
+  ⚠️ Conflict (different pets): 'Feeding' for Biscuit at 08:30 overlaps 'Feeding' for Mochi at 08:30.
+
+Why this plan:
+  Considered 6 eligible task(s); scheduled 6 within a 120-minute budget (105 min used). Tasks were ordered by priority (high first), then by shorter duration to fit more in. Moved to avoid overlap: Feeding (08:30→08:40).
 ```
+
 
 ## 🧪 Testing PawPal+
 
@@ -72,14 +87,75 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+PawPal+ turns a flat list of tasks into an ordered, time-budgeted, conflict-aware
+daily plan. All of this logic lives in `pawpal_system.py`. The quick map:
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Sort by time | `Scheduler.sort_by_time()` | Lambda `key` on zero-padded `"HH:MM"` strings; untimed tasks sink to the end |
+| Sort by priority | `Scheduler.sort_tasks()` | High priority first, then shorter duration as a tie-breaker |
+| Filter by pet / status | `Scheduler.filter_tasks()` | Filter by `pet_id` or `pet_name`, by `category`, and by completion status |
+| Conflict detection | `Scheduler.detect_conflicts()` | Returns warning strings for overlapping time windows; never crashes |
+| Conflict resolution | `Scheduler.resolve_conflicts()` | Places tasks back-to-back and records any that were bumped |
+| Recurring tasks | `Task.occurs_on()`, `Task.next_due_date()`, `Task.next_occurrence()`, `Pet.mark_task_complete()` | Daily / weekly / weekdays; completing one auto-creates the next |
+| Full pipeline | `Scheduler.generate_plan()` | filter → sort → fit budget → place → explain |
+
+### Sorting behavior
+
+- **`Scheduler.sort_by_time()`** orders tasks chronologically. It sorts with a
+  lambda `key` that renders each task's `preferred_time` as an `"HH:MM"` string —
+  because hours and minutes are zero-padded, plain string comparison matches
+  clock order. Tasks without a preferred time map to `"99:99"` so they sort to
+  the end instead of raising on `None`.
+- **`Scheduler.sort_tasks()`** orders by importance: highest `Priority` first,
+  then shorter `duration` as a tie-breaker so more tasks fit into the budget.
+
+### Filtering behavior
+
+**`Scheduler.filter_tasks()`** is the single filtering entry point. By default it
+keeps only tasks that are **not completed** and that **occur today**
+(via `Task.occurs_on()`). Optional keyword arguments narrow the results further:
+
+- `pet_id=...` or `pet_name=...` — restrict to one pet (name is case-insensitive
+  and resolved to an id through the owner's pet list).
+- `category=...` — restrict to one kind of task (e.g. `"feeding"`).
+- `include_completed=True` — keep finished tasks, for a review/history view.
+
+The app uses this both for the per-pet task tables and the "show completed" toggle.
+
+### Conflict detection logic
+
+Two methods split the work:
+
+- **`Scheduler.detect_conflicts()`** is a lightweight, read-only check. It sorts
+  the timed tasks by the same `"HH:MM"` key, then compares each task's intended
+  window (`preferred_time` → `preferred_time + duration`) against the ones after
+  it. Because the list is sorted, it can `break` as soon as a later task starts
+  after the current one ends. It **returns a list of human-readable warning
+  strings** (flagging whether the clash is for the *same pet* or *different
+  pets*) rather than raising — so the UI shows a warning and the program keeps
+  running. These land in `Schedule.warnings`.
+- **`Scheduler.resolve_conflicts()`** actually places tasks on the clock,
+  back-to-back with no overlaps, honoring each `preferred_time` when the slot is
+  still free. When a preferred slot is already taken, the task is bumped later
+  and the move is recorded so `explain()` can report it (e.g. `Feeding
+  (08:30→08:40)`).
+
+### Recurring task logic
+
+Recurrence is modeled on `Task` (`recurrence`, `recurrence_weekday`, `due_date`)
+and driven by three methods plus one on `Pet`:
+
+- **`Task.occurs_on(day)`** decides whether a task is due on a given day:
+  `daily` every day, `weekly` on its anchor weekday, `weekdays` Monday–Friday.
+- **`Task.next_due_date(after)`** uses `datetime.timedelta` to compute the next
+  occurrence accurately (handling month/year rollovers): `daily` → `after + 1
+  day`, `weekly` → `after + 7 days`, `weekdays` → the next Mon–Fri.
+- **`Task.next_occurrence()`** builds the follow-up task — a copy with
+  `completed=False` and an advanced `due_date`.
+- **`Pet.mark_task_complete(task_id)`** ties it together: it marks the task done
+  and, if the task recurs, automatically creates and attaches the next instance
+  (with a fresh id). One-off tasks simply complete.
 
 ## 📸 Demo Walkthrough
 

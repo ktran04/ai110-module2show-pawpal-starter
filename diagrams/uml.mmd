@@ -1,15 +1,82 @@
+# PawPal+ — Class Diagram
+
+UML class diagram based on the objects, attributes, and methods brainstormed in
+[reflection.md](../reflection.md) (Step 2 — Building Blocks).
+
+```mermaid
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
-    %% Keep this file updated so it matches your final implementation.
-
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Owner {
+        +int owner_id
+        +str name
+        +int available_minutes
+        +dict preferences
+        +add_pet(pet) void
+        +set_preferences(preferences) void
+        +set_available_time(minutes) void
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class Pet {
+        +int pet_id
+        +int owner_id
+        +str name
+        +str species
+        +str breed
+        +list~Task~ tasks
+        +add_task(task) void
+        +edit_task(task_id, ...) void
+        +remove_task(task_id) void
+        +list_tasks() list~Task~
     }
 
-    ClassName --> AnotherClass : relationship
+    class Task {
+        +int task_id
+        +int pet_id
+        +str name
+        +str category
+        +int duration
+        +str priority
+        +str preferred_time
+        +str recurrence
+        +bool completed
+        +edit(...) void
+        +mark_done() void
+        +is_recurring() bool
+    }
+
+    class Scheduler {
+        +date date
+        +dict constraints
+        +list~Task~ tasks
+        +sort_tasks() list~Task~
+        +filter_tasks() list~Task~
+        +resolve_conflicts() void
+        +generate_plan() Schedule
+        +explain() str
+    }
+
+    class Schedule {
+        +date date
+        +list entries
+        +str reasoning
+        +add_entry(time, task) void
+        +total_time() int
+        +display() void
+    }
+
+    Owner "1" --> "*" Pet : owns
+    Pet "1" --> "*" Task : has
+    Scheduler ..> Task : reads
+    Scheduler ..> Owner : reads constraints
+    Scheduler ..> Schedule : creates
+    Schedule "1" o-- "*" Task : contains
+```
+
+## Relationships
+
+- **Owner → Pet** (one-to-many): an owner owns one or more pets.
+- **Pet → Task** (one-to-many): each pet has many care tasks.
+- **Scheduler → Task / Owner** (dependency): the scheduler reads a pet's tasks and the
+  owner's constraints as inputs.
+- **Scheduler → Schedule** (dependency): the scheduler produces a `Schedule`.
+- **Schedule ◇→ Task** (aggregation): a schedule contains references to the tasks it slotted
+  into the day.
