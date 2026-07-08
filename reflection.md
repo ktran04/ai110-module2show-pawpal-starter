@@ -75,22 +75,28 @@ doing everything, which matters more than doing them at an exact minute. Being a
 
 **b. Tradeoffs**
 
-**Tradeoff:** priority ordering can override a task's preferred time. Because the scheduler
-sorts by priority before it assigns clock times, a high-priority task placed earlier can push
-the cursor forward so that a later task misses its preferred slot. For example, a walk that
-prefers 8:00 ended up at 9:20 because a 9:00 feeding (also high priority) was placed first.
+**Tradeoff:** priority decides what gets dropped, not what time a task happens at. When the
+owner runs out of time, the scheduler fills the budget highest-priority-first, so the
+lowest-priority tasks are the ones that get cut. That means a task can lose its spot completely,
+even if it had an early preferred time it wanted, because something more important used up the
+minutes first. For example, if the day is full, a LOW-priority play time can get skipped while
+the HIGH-priority feeding and walk still make it in.
 
-This tradeoff is reasonable for pet care because the goal is that important tasks get done,
-not that they happen at an exact time. A walk at 9:20 instead of 8:00 is still a completed
-walk; skipping the walk to protect the 8:00 slot would be worse. The plan is always valid
-(no overlaps, never exceeds the time budget), which is the property that actually matters for a
-busy owner. Honoring exact preferred times would require a more complex time-anchored pass,
-which I will note as a future improvement.
+I think this is the right call for pet care. The goal is that the important things (meds,
+feeding, a walk) actually get done, not that everything gets done. Dropping a play session to
+protect a feeding is better than doing it the other way around. The plan is also always valid
+(no overlaps, never over the time budget), which is the part that actually matters to a busy
+owner.
 
-A second, related tradeoff is that budget packing is greedy: it fills highest-priority-first
-rather than searching for the combination of tasks that uses time most efficiently. A single
-large high-priority task can block several small ones that together would have been more
-valuable. Greedy keeps the logic simple and predictable, which is easier to trust and test.
+**Tradeoff:** the plan is placed in time order, so a task can still miss its exact preferred
+time, but when that happens it is because an earlier task ran long and pushed into its slot, not because of priority. For example, two feedings both wanted 8:30, so the second one got bumped to
+8:40 to sit back-to-back. Honoring every exact preferred time would need a more complex
+time-anchored pass, which I will note as a future improvement.
+
+A related tradeoff is that the budget packing is greedy: it fills highest-priority-first instead
+of searching for the combination of tasks that uses the time most efficiently. So one big
+high-priority task can block a few small ones that together would have been more useful. I kept
+it greedy because it is simple and predictable, which makes it easier to trust and to test.
 
 ---
 
@@ -99,13 +105,19 @@ valuable. Greedy keeps the logic simple and predictable, which is easier to trus
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+
+I used it a lot for coding out what I wanted (add features, making it smart, etc). I also used it to help with the UML diagram after I described the objects and actions
+
 - What kinds of prompts or questions were most helpful?
+Focused prompts one at a time with clear outputs/results.
 
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+To be completely honest, I did not check the AI's suggestion as well as I would have liked. I made sure to read through everything it suggested, but ended up accepting a lot of the suggestions.
 
+- How did you evaluate or verify what the AI suggested?
+Primarily just seeing if its logic/reasoning matched up with the code and then test its functionality. I also like to look and see if the code is disproportionately long compared to its functionality.
 ---
 
 ## 4. Testing and Verification
@@ -113,13 +125,18 @@ valuable. Greedy keeps the logic simple and predictable, which is easier to trus
 **a. What you tested**
 
 - What behaviors did you test?
+Some behaviors I tested include basic adding tasks, making a scheduler, marking tasks as done, sorting, recurring tasks, and all the way to edge cases like pet with no tasks (you can have a pet without giving it a task so basically it sits there and have fun and will give you an empty plan that does not take time).
+
 - Why were these tests important?
+Basic starter tests (adding tasks, making a scheduler, marking tasks as done) and sorting are fundamental features of the system. That must work before trying to make it smart and account for edge cases. Edge cases are important to test for smooth user experience (i.e. a user's app should not crash or behave weirdly just because their pet doesn't have a task yet) or prevent threat actors from inputting malicious things into our system to crash or make it do weird things.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+4 out of 5 like I stated. All functions work correctly and UI is very easy on the eyes.
 
+- What edge cases would you test next if you had more time?
+If a task runs past midnight or start earlier than owner's start day. If 2 tasks ties at same priority and preferred time.
 ---
 
 ## 5. Reflection
@@ -127,11 +144,15 @@ valuable. Greedy keeps the logic simple and predictable, which is easier to trus
 **a. What went well**
 
 - What part of this project are you most satisfied with?
+Getting to practice system design by coming up with objects and defining their actions. Using AI to double check and suggest further extensions was also fun and made me more confident. 
 
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
+Implement challenge 2 to have data persistence for the pets. Making it actually save your pets and tasks between runs would be the most useful real-world upgrade, since everything resets when you restart it.
+
 
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+Checking its outputs to see if it matches its reasoning is very important in ensuring the code does not stray from the design and get us lost.

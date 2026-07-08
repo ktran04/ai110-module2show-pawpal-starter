@@ -1,0 +1,134 @@
+# PawPal+ — Class Diagram (Final)
+
+Updated UML class diagram reflecting the **final implementation** in
+[../pawpal_system.py](../pawpal_system.py). It supersedes the initial draft in
+[uml.mmd](uml.mmd); see **What changed since the initial draft** below for the
+diff.
+
+```mermaid
+classDiagram
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    class Owner {
+        +int owner_id
+        +str name
+        +int available_minutes
+        +dict preferences
+        +list~Pet~ pets
+        +add_pet(pet) void
+        +set_preferences(preferences) void
+        +set_available_time(minutes) void
+        +get_all_tasks() list~Task~
+    }
+
+    class Pet {
+        +int pet_id
+        +int owner_id
+        +str name
+        +str species
+        +str breed
+        +list~Task~ tasks
+        +add_task(task) void
+        +edit_task(task_id, ...) void
+        +remove_task(task_id) void
+        +list_tasks() list~Task~
+        +mark_task_complete(task_id) Task
+        -_find(task_id) Task
+    }
+
+    class Task {
+        +int task_id
+        +int pet_id
+        +str name
+        +str category
+        +int duration
+        +Priority priority
+        +time preferred_time
+        +str recurrence
+        +int recurrence_weekday
+        +date due_date
+        +bool completed
+        +edit(...) void
+        +mark_done() void
+        +is_recurring() bool
+        +next_due_date(after) date
+        +next_occurrence(new_id) Task
+        +occurs_on(day) bool
+    }
+
+    class Scheduler {
+        +date date
+        +Owner owner
+        +list~Task~ tasks
+        +filter_tasks(tasks, ...) list~Task~
+        +sort_tasks(tasks) list~Task~
+        +sort_by_time(tasks) list~Task~
+        +resolve_conflicts(tasks) list
+        +detect_conflicts(tasks) list~str~
+        +generate_plan() Schedule
+        +explain() str
+        -_fit_to_budget(ordered) list~Task~
+    }
+
+    class Schedule {
+        +date date
+        +list entries
+        +str reasoning
+        +list~str~ warnings
+        +add_entry(time, task) void
+        +total_time() int
+        +display() str
+    }
+
+    Owner "1" --> "*" Pet : owns
+    Pet "1" --> "*" Task : has
+    Task ..> Priority : uses
+    Scheduler --> "1" Owner : reads constraints
+    Scheduler ..> Task : reads
+    Scheduler ..> Schedule : creates
+    Schedule "1" o-- "*" Task : contains
+```
+
+## Relationships
+
+- **Owner → Pet** (one-to-many): an owner owns one or more pets.
+- **Pet → Task** (one-to-many): each pet has many care tasks.
+- **Task ⤏ Priority** (dependency): a task's importance is a `Priority` enum value
+  (LOW/MEDIUM/HIGH), which is what makes `sort_tasks()` orderable.
+- **Scheduler → Owner** (association): the scheduler now *holds* a reference to
+  the `Owner` and reads `available_minutes` + `preferences` from it, so there is a
+  single source of truth for constraints (replacing the earlier loose
+  `constraints` dict).
+- **Scheduler ⤏ Task** (dependency): the scheduler reads candidate tasks as input.
+- **Scheduler ⤏ Schedule** (dependency): the scheduler produces a `Schedule`.
+- **Schedule ◇→ Task** (aggregation): a schedule holds references to the tasks it
+  slotted into the day (as `(time, Task)` entries).
+
+## What changed since the initial draft
+
+The initial diagram ([uml.mmd](uml.mmd)) was drawn before implementation. The
+build added the following:
+
+- **New `Priority` enumeration** — task priority became an ordered `IntEnum`
+  (LOW/MEDIUM/HIGH) instead of a plain string, so tasks sort by importance
+  directly. `Task.priority` and `preferred_time` are now typed (`Priority`,
+  `time`) rather than `str`.
+- **`Task` gained recurrence support** — `recurrence_weekday` and `due_date`
+  attributes plus `next_due_date()`, `next_occurrence()`, and `occurs_on()` drive
+  daily/weekly/weekdays repetition.
+- **`Pet.mark_task_complete()`** — completing a recurring task auto-creates and
+  attaches its next instance (helper `_find()` locates tasks by id).
+- **`Owner` exposes `pets` and `get_all_tasks()`** — the scheduler pulls tasks
+  across every pet from one place.
+- **`Scheduler` now references the `Owner`** instead of a `constraints` dict, and
+  gained `sort_by_time()` (chronological ordering), `detect_conflicts()`
+  (non-raising overlap warnings), and the private `_fit_to_budget()` greedy
+  time-budget step. `resolve_conflicts()` now returns the placed
+  `(time, Task)` list.
+- **`Schedule.warnings`** — a list of human-readable time-conflict alerts carried
+  alongside the plan so the UI can surface them without crashing.

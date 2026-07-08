@@ -42,6 +42,59 @@ pip install -r requirements.txt
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
 
+## ✨ Features
+
+The scheduling algorithms all live in `pawpal_system.py` and are exercised by
+both the Streamlit UI (`app.py`) and the CLI demo (`main.py`):
+
+- **Priority sorting** — orders tasks by importance (HIGH → MEDIUM → LOW), then
+  by shorter duration as a tie-breaker so more work fits the budget
+  (`Scheduler.sort_tasks()`).
+- **Sorting by time** — arranges tasks chronologically by their preferred time
+  using a zero-padded `"HH:MM"` key; untimed tasks sink to the end
+  (`Scheduler.sort_by_time()`).
+- **Filtering by pet, category, and status** — narrows the task list to one pet
+  (by id or case-insensitive name), one category, and (optionally) completed
+  tasks, while always dropping tasks that don't occur today
+  (`Scheduler.filter_tasks()`).
+- **Time-budget fitting** — greedily keeps the highest-priority tasks that fit
+  the owner's available minutes and records anything skipped for lack of time
+  (`Scheduler._fit_to_budget()`).
+- **Conflict warnings** — flags overlapping time windows (labeling same-pet vs.
+  different-pet clashes) as human-readable strings instead of crashing
+  (`Scheduler.detect_conflicts()`).
+- **Conflict resolution** — places tasks back-to-back on the clock, honoring each
+  preferred time when the slot is free and bumping the loser later when it isn't
+  (`Scheduler.resolve_conflicts()`).
+- **Daily / weekly / weekdays recurrence** — decides whether a task is due today
+  and, when a recurring task is completed, auto-creates its next instance with an
+  advanced due date (`Task.occurs_on()`, `Task.next_due_date()`,
+  `Task.next_occurrence()`, `Pet.mark_task_complete()`).
+- **Explainable plans** — every generated schedule carries a plain-language
+  rationale (counts considered/scheduled, ordering rule, skips, and any moves)
+  (`Scheduler.explain()`).
+
+## 📐 UML Diagram
+
+The class design that the code above implements. The Mermaid source is the source
+of truth ([diagrams/uml_final.mmd](diagrams/uml_final.mmd)); a rendered image is
+included for convenience.
+
+![PawPal+ class diagram](diagrams/uml_final.png)
+
+- **`Owner` → `Pet` → `Task`** form the data hierarchy (one owner, many pets, many
+  tasks each).
+- **`Scheduler`** holds a reference to the `Owner` (its single source of truth for
+  available time and preferences), reads the candidate `Task`s, and produces a
+  **`Schedule`**.
+- **`Priority`** is an `IntEnum` (LOW/MEDIUM/HIGH) so tasks are directly sortable
+  by importance. This should complete challenge 3.
+
+The initial draft ([diagrams/uml.mmd](diagrams/uml.mmd)) is kept for comparison;
+`uml_final.mmd` documents what was actually built (recurrence fields/methods on
+`Task`, `mark_task_complete()` on `Pet`, `sort_by_time()`/`detect_conflicts()` on
+`Scheduler`, `warnings` on `Schedule`, and the `Scheduler → Owner` association).
+
 ## 🖥️ Sample Output
 
 Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
@@ -204,12 +257,119 @@ and driven by three methods plus one on `Pet`:
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### The main UI (`streamlit run app.py`)
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+The app is a single scrolling page, top to bottom:
+
+- **Owner settings** — edit the caregiver's name, the **available minutes** for
+  today (the time budget), and the **day start time** (when the first task is
+  slotted).
+- **Add a pet** — a form for name, species, and breed; submitting calls
+  `Owner.add_pet()`.
+- **Add a task** — pick which pet it's for, then set title, category, duration,
+  priority, how it repeats (one-off / daily / weekly / weekdays), and an optional
+  preferred time; submitting calls `Pet.add_task()`.
+- **Current pets & tasks** — a per-pet table you can **sort by Priority or Time**
+  and toggle **completed tasks** on/off. A running **schedule-health banner**
+  shows conflict warnings (or a green all-clear) as you edit. Each pet has a
+  **Mark complete** control — completing a recurring task auto-creates its next
+  instance.
+- **Build today's schedule** — the primary button runs the full pipeline and
+  renders the time-slotted plan, any conflict warnings, the total-vs-budget
+  minutes, and a plain-language **"Why this plan"** explanation.
+
+### Example workflow
+
+1. Set **Available minutes** to `120` and **day start** to `08:00`.
+2. **Add a pet** — `Biscuit`, a Golden Retriever dog.
+3. **Add a task** for Biscuit — `Morning walk`, category *walk*, 30 min, HIGH
+   priority, repeats *daily*, preferred time `08:00`.
+4. **Add a second pet** (`Mochi`, a cat) and give it a `Feeding` task also at
+   `08:00` — deliberately clashing.
+5. Watch the **schedule-health banner** immediately flag the overlap.
+6. Click **Generate schedule** and read the ordered plan: the walk keeps `08:00`,
+   the feeding is bumped back-to-back, and the explanation names the move.
+7. Back in **Current pets & tasks**, mark the daily walk **complete** — a fresh
+   copy appears, due tomorrow.
+
+### Key Scheduler behaviors on display
+
+- **Priority + duration sorting** — HIGH tasks lead; equal priorities break ties
+  by shorter duration.
+- **Sorting by time** — the "Time" toggle and the final plan both order tasks
+  chronologically, with untimed tasks last.
+- **Conflict warnings** — same-time tasks are labeled *same pet* vs. *different
+  pets* and surfaced without crashing.
+- **Conflict resolution** — a clashing task is shifted to the next free slot and
+  the move (`08:30→08:40`) is reported in the explanation.
+- **Budget fitting** — only what fits `available_minutes` is scheduled; the rest
+  is listed as skipped.
+- **Daily recurrence** — completing the walk spawns its next instance for the
+  following day.
+
+### Sample CLI output (`python main.py`)
+
+`main.py` builds a two-pet world (with a deliberate 08:30 feeding clash) and
+prints the same logic the UI uses:
+
+```
+--- Tasks as entered (out of order) ---
+    —    Training       [MEDIUM]
+  08:30  Feeding        [HIGH]
+  08:00  Morning walk   [HIGH]
+  18:00  Play time      [LOW]
+    —    Litter cleanup [MEDIUM]
+  08:30  Feeding        [HIGH]
+
+--- Sorted by TIME (lambda key on 'HH:MM') ---
+  08:00  Morning walk   [HIGH]
+  08:30  Feeding        [HIGH]
+  08:30  Feeding        [HIGH]
+  18:00  Play time      [LOW]
+    —    Training       [MEDIUM]
+    —    Litter cleanup [MEDIUM]
+
+--- Sorted by PRIORITY (high first, then shorter) ---
+  HIGH    Feeding        (10 min)
+  HIGH    Feeding        (10 min)
+  HIGH    Morning walk   (30 min)
+  MEDIUM  Litter cleanup (15 min)
+  MEDIUM  Training       (20 min)
+  LOW     Play time      (20 min)
+
+--- Filtered to Mochi only (by pet name) ---
+  Play time      (enrichment)
+  Litter cleanup (grooming)
+  Feeding        (feeding)
+
+--- Filtered to incomplete only (default) vs. including completed ---
+  incomplete today: 6 | including completed: 6
+
+============================================================
+  TODAY'S SCHEDULE  (MONDAY, JULY 06, 2026)
+  Caregiver: Jordan
+============================================================
+  08:00  │  Morning walk      (Biscuit, 30 min)       [HIGH]
+  08:30  │  Feeding           (Biscuit, 10 min)       [HIGH]
+  08:40  │  Feeding           (Mochi, 10 min)         [HIGH]
+  18:00  │  Play time         (Mochi, 20 min)         [LOW]
+  18:20  │  Litter cleanup    (Mochi, 15 min)         [MEDIUM]
+  18:35  │  Training          (Biscuit, 20 min)       [MEDIUM]
+------------------------------------------------------------
+  Total scheduled time: 105 / 120 min
+============================================================
+
+Conflict warnings:
+  ⚠️ Conflict (different pets): 'Feeding' for Biscuit at 08:30 overlaps 'Feeding' for Mochi at 08:30.
+
+Why this plan:
+  Considered 6 eligible task(s); scheduled 6 within a 120-minute budget (105 min used). Tasks were ordered by priority (high first), then by shorter duration to fit more in. Moved to avoid overlap: Feeding (08:30→08:40).
+
+--- Recurring auto-generation ---
+  Before: Biscuit has 3 task(s).
+  Completed 'Morning walk' (recurrence=daily).
+  Auto-created next 'Morning walk' due 2026-07-07 (id 4, completed=False).
+  After:  Biscuit has 4 task(s).
+```
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->

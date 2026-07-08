@@ -139,6 +139,23 @@ if owner.pets:
     with c2:
         show_done = st.checkbox("Show completed tasks", value=True)
 
+    # Proactive "schedule health" check across ALL of the owner's tasks, so the
+    # owner sees clashes *while editing* — not only after generating the plan.
+    all_today = view.filter_tasks(owner.get_all_tasks())
+    conflicts = view.detect_conflicts(all_today)
+    if conflicts:
+        st.warning(
+            f"**{len(conflicts)} time conflict(s) found.** "
+            "The schedule will still be built — PawPal+ shifts the later task to "
+            "back-to-back — but you may want to move a preferred time so nothing "
+            "gets bumped:"
+        )
+        for w in conflicts:
+            # `w` already starts with a ⚠️ marker; show each on its own line.
+            st.markdown(f"- {w}")
+    else:
+        st.success("No time conflicts — every task has a clear slot. 🎉")
+
     for pet in owner.pets:
         with st.expander(f"{pet.name} — {pet.species} ({pet.breed or 'unknown breed'})", expanded=True):
             # Filter (by this pet + completion status), then sort by the chosen key.
@@ -215,9 +232,20 @@ if st.button("Generate schedule", type="primary"):
         else:
             st.info("Nothing fit in the plan.")
 
-        # Surface any detected time conflicts as warnings (not a crash).
-        for w in schedule.warnings:
-            st.warning(w)
+        # Surface any detected time conflicts as warnings (not a crash). We give
+        # them a single heading so they read as one "here's what to know" block
+        # rather than a scatter of alerts, and confirm plainly when there are none.
+        if schedule.warnings:
+            st.warning(f"**Heads up — {len(schedule.warnings)} time conflict(s):**")
+            for w in schedule.warnings:
+                st.markdown(f"- {w}")
+            st.caption(
+                "PawPal+ resolved these by placing the tasks back-to-back "
+                "(see *Why this plan* below). To keep a task at its exact time, "
+                "give the overlapping one a different preferred time."
+            )
+        else:
+            st.success("No time conflicts — everything fits cleanly. 🎉")
 
         st.caption(
             f"Total scheduled: {schedule.total_time()} / {owner.available_minutes} min"
